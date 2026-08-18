@@ -1,6 +1,6 @@
 # ⛓️ ChainIntern — Blockchain Internship Tracking System
 
-A full-stack dApp using Flask, Solidity, Ganache, and MetaMask.
+A full-stack dApp using Flask, Solidity, Ganache, and MetaMask.(Part Of BlockChain Course, PES University)
 
 ---
 
