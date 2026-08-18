@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Student — ChainIntern</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.sidebar-item.active { border-left: 2px solid var(--student-accent); }
+.topbar-brand .logo-icon { background: rgba(16,185,129,.15); }
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+<div id="loader"><div class="spinner"></div><span style="color:var(--text2);font-size:14px">Processing transaction...</span></div>
+
+<!-- ── Not-Registered Wall ──────────────────────────────────────── -->
+<div id="not-registered-wall" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg,#0d0d14);flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:32px">
+    <div style="font-size:64px">&#x1F6AB;</div>
+    <div style="font-size:22px;font-weight:700;color:var(--text,#fff)">Access Denied</div>
+    <div style="max-width:420px;text-align:center;font-size:14px;color:var(--text2,#aaa);line-height:1.8">
+        The wallet <code id="denied-addr" style="color:#F59E0B"></code> is <strong>not registered as a Student</strong>.<br><br>
+        Ask the <strong>Admin</strong> to register your wallet address, then reconnect.
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px">
+        <a href="/" class="btn btn-outline">🏠 Home</a>
+        <button class="btn btn-primary" onclick="retryConnect()">🔄 Try Different Wallet</button>
+    </div>
+</div>
+
+<!-- History Modal -->
+<div class="modal-overlay" id="history-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">📜 Application Timeline</div>
+            <button class="modal-close" onclick="closeHistoryModal()">✕</button>
+        </div>
+        <div id="history-content"></div>
+    </div>
+</div>
+
+<!-- Apply Modal -->
+<div class="modal-overlay" id="apply-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Apply for Internship</div>
+            <button class="modal-close" onclick="closeApplyModal()">✕</button>
+        </div>
+        <div id="apply-internship-info" style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:16px"></div>
+        <div style="background:rgba(79,110,247,.06);border:1px solid rgba(79,110,247,.15);border-radius:8px;padding:12px;font-size:13px;color:var(--text2);margin-bottom:16px">
+            ⛓️ This will record your application as an immutable transaction on the blockchain. Your wallet address and name will be permanently associated with this application.
+        </div>
+        <button class="btn btn-success" style="width:100%" onclick="confirmApply()">Confirm & Submit On-Chain</button>
+    </div>
+</div>
+
+<!-- ─── Topbar ─────────────────────────────────────────────────────── -->
+<header class="topbar">
+    <a href="/" class="topbar-brand">
+        <div class="logo-icon">🎓</div>
+        ChainIntern <span style="color:var(--student-accent);margin-left:4px">Student</span>
+    </a>
+    <div class="topbar-right">
+        <div class="wallet-pill">
+            <div class="wallet-dot"></div>
+            <span class="wallet-addr mono">Not connected</span>
+        </div>
+        <button class="btn btn-outline btn-sm" id="connect-btn" onclick="connectWallet()">🦊 Connect MetaMask</button>
+    </div>
+</header>
+
+<div class="layout">
+    <aside class="sidebar">
+        <div class="sidebar-section">Dashboard</div>
+        <a class="sidebar-item active" onclick="showSection('overview')"><span class="icon">📊</span> My Dashboard</a>
+        <div class="sidebar-section">Applications</div>
+        <a class="sidebar-item" onclick="showSection('browse')"><span class="icon">🔍</span> Browse Openings</a>
+        <a class="sidebar-item" onclick="showSection('myapps')"><span class="icon">📋</span> My Applications</a>
+        <a class="sidebar-item" onclick="showSection('track')"><span class="icon">⛓️</span> Track Status</a>
+        <a class="sidebar-item" href="/"><span class="icon">🏠</span> Home</a>
+    </aside>
+
+    <main class="main">
+
+        <!-- Overview -->
+        <section id="s-overview">
+            <div class="welcome-banner">
+                <h2>Welcome, <span id="welcome-name">Student</span> 🎓</h2>
+                <p>Apply for internships and track your application status with full blockchain transparency.</p>
+            </div>
+            <div class="stats-row">
+                <div class="stat-card green">
+                    <span class="stat-label">Applied</span>
+                    <span class="stat-value" id="stat-applied">—</span>
+                    <span class="stat-icon">📋</span>
+                </div>
+                <div class="stat-card blue">
+                    <span class="stat-label">Under Review</span>
+                    <span class="stat-value" id="stat-review">—</span>
+                    <span class="stat-icon">🔍</span>
+                </div>
+                <div class="stat-card amber">
+                    <span class="stat-label">Shortlisted</span>
+                    <span class="stat-value" id="stat-shortlisted">—</span>
+                    <span class="stat-icon">⭐</span>
+                </div>
+                <div class="stat-card green">
+                    <span class="stat-label">Accepted</span>
+                    <span class="stat-value" id="stat-accepted">—</span>
+                    <span class="stat-icon">🎉</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📋 Recent Applications</div>
+                <div id="recent-my-apps">
+                    <div class="empty-state"><div class="icon">🎓</div><p>Connect wallet to view your applications</p></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 How It Works</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">
+                    <div style="text-align:center;padding:16px">
+                        <div style="font-size:28px;margin-bottom:8px">🦊</div>
+                        <div style="font-size:13px;font-weight:600;margin-bottom:4px">1. Connect MetaMask</div>
+                        <div style="font-size:12px;color:var(--text3)">Link your Ganache wallet to prove identity</div>
+                    </div>
+                    <div style="text-align:center;padding:16px">
+                        <div style="font-size:28px;margin-bottom:8px">🔍</div>
+                        <div style="font-size:13px;font-weight:600;margin-bottom:4px">2. Browse Openings</div>
+                        <div style="font-size:12px;color:var(--text3)">View all active internships posted on-chain</div>
+                    </div>
+                    <div style="text-align:center;padding:16px">
+                        <div style="font-size:28px;margin-bottom:8px">⛓️</div>
+                        <div style="font-size:13px;font-weight:600;margin-bottom:4px">3. Apply On-Chain</div>
+                        <div style="font-size:12px;color:var(--text3)">Your application is immutably recorded</div>
+                    </div>
+                    <div style="text-align:center;padding:16px">
+                        <div style="font-size:28px;margin-bottom:8px">📜</div>
+                        <div style="font-size:13px;font-weight:600;margin-bottom:4px">4. Track Transparently</div>
+                        <div style="font-size:12px;color:var(--text3)">Every status update is verifiable on the ledger</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Browse -->
+        <section id="s-browse" style="display:none">
+            <div class="page-header">
+                <h1>🔍 Browse Internships</h1>
+                <p>All active internship opportunities posted by registered companies.</p>
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:16px">
+                <button class="btn btn-outline btn-sm" onclick="loadInternships()">🔄 Refresh</button>
+            </div>
+            <div id="internship-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
+                <div class="empty-state" style="grid-column:1/-1"><div class="icon">💼</div><p>Connect wallet to browse openings</p></div>
+            </div>
+        </section>
+
+        <!-- My Applications -->
+        <section id="s-myapps" style="display:none">
+            <div class="page-header">
+                <h1>📋 My Applications</h1>
+                <p>All internships you've applied for — read-only, immutable on-chain records.</p>
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:16px">
+                <button class="btn btn-outline btn-sm" onclick="loadMyApplications()">🔄 Refresh</button>
+            </div>
+            <div class="card" style="padding:0;overflow:hidden">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>App ID</th>
+                                <th>Company</th>
+                                <th>Role</th>
+                                <th>Applied</th>
+                                <th>Current Status</th>
+                                <th>History</th>
+                            </tr>
+                        </thead>
+                        <tbody id="myapps-tbody">
+                            <tr><td colspan="6"><div class="empty-state"><div class="icon">📋</div><p>No applications yet</p></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Track -->
+        <section id="s-track" style="display:none">
+            <div class="page-header">
+                <h1>⛓️ Track Application Status</h1>
+                <p>Look up any application's complete blockchain audit trail by Application ID.</p>
+            </div>
+            <div class="card">
+                <div class="card-title">Lookup Application</div>
+                <div style="display:flex;gap:10px">
+                    <input type="number" id="track-id" placeholder="Enter Application ID (e.g. 1)" style="max-width:280px">
+                    <button class="btn btn-primary" onclick="trackApplication()">🔍 Fetch from Chain</button>
+                </div>
+            </div>
+            <div id="track-result" style="display:none">
+                <div class="card">
+                    <div class="card-title" id="track-title">Application Details</div>
+                    <div id="track-details" style="margin-bottom:20px"></div>
+                    <div class="divider"></div>
+                    <div style="font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text)">⛓️ Immutable Status Timeline</div>
+                    <div class="timeline" id="track-timeline"></div>
+                    <div id="track-chain-info" style="margin-top:16px;padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text3)"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<script src="/static/js/web3.min.js"></script>
+<script src="/static/js/web3utils.js"></script>
+<script>
+let applyTargetId = null;
+let appliedIds = new Set();
+
+function showSection(name) {
+    document.querySelectorAll("main section").forEach(s => s.style.display = "none");
+    document.getElementById("s-" + name).style.display = "";
+    document.querySelectorAll(".sidebar-item").forEach(el => el.classList.remove("active"));
+    if (name === "browse") loadInternships();
+    if (name === "myapps") loadMyApplications();
+    if (name === "overview") loadOverviewStats();
+}
+
+async function connectWallet() {
+    const btn = document.getElementById("connect-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Connecting…"; }
+    const ok = await initWeb3();
+    if (!ok) {
+        if (btn) { btn.disabled = false; btn.textContent = "🦊 Connect MetaMask"; }
+        return;
+    }
+
+    // ─ Role check ──────────────────────────────────
+    if (contract) {
+        try {
+            const role = await contract.methods.getRole(userAccount).call();
+            if (role !== "student") {
+                document.getElementById("denied-addr").textContent = userAccount;
+                const wall = document.getElementById("not-registered-wall");
+                wall.style.display = "flex";
+                if (btn) { btn.disabled = false; btn.textContent = "🦊 Connect MetaMask"; }
+                return;
+            }
+        } catch (e) {
+            showToast("Could not verify role: " + e.message, "error");
+            if (btn) { btn.disabled = false; btn.textContent = "🦊 Connect MetaMask"; }
+            return;
+        }
+    }
+
+    // ─ Authorised ─────────────────────────────────
+    document.querySelectorAll(".wallet-addr").forEach(el => el.textContent = shortenAddr(userAccount));
+    if (btn) btn.textContent = "✅ " + shortenAddr(userAccount);
+
+    // Fetch registered name from chain
+    try {
+        const name = await contract.methods.walletToName(userAccount).call();
+        if (name && name.trim()) {
+            document.getElementById("welcome-name").textContent = name;
+        }
+    } catch (e) {}
+
+    showToast("Connected: " + shortenAddr(userAccount), "success");
+    await loadOverviewStats();
+}
+
+function retryConnect() {
+    document.getElementById("not-registered-wall").style.display = "none";
+    userAccount = null;
+    contract    = null;
+    connectWallet();
+}
+
+async function loadOverviewStats() {
+    if (!contract || !userAccount) return;
+    try {
+        const myAppIds = (await contract.methods.getStudentApplications(userAccount).call()) || [];
+        let review = 0, shortlisted = 0, accepted = 0;
+        const recentRows = [];
+
+        for (const aid of myAppIds) {
+            appliedIds.add(Number(aid));
+            const app = await contract.methods.applications(aid).call();
+            const hist = await contract.methods.getStatusHistory(aid).call() || [];
+            if (!hist.length) continue;
+            const latest = hist[hist.length - 1].status;
+            const intern = await contract.methods.internships(app.internshipId).call();
+            if (latest === "under_review") review++;
+            if (latest === "shortlisted") shortlisted++;
+            if (latest === "accepted") accepted++;
+            if (recentRows.length < 5) {
+                recentRows.push({ aid, app, intern, latest });
+            }
+        }
+
+        document.getElementById("stat-applied").textContent = myAppIds.length;
+        document.getElementById("stat-review").textContent = review;
+        document.getElementById("stat-shortlisted").textContent = shortlisted;
+        document.getElementById("stat-accepted").textContent = accepted;
+
+        if (recentRows.length === 0) {
+            document.getElementById("recent-my-apps").innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No applications yet. Browse openings to get started!</p></div>';
+        } else {
+            document.getElementById("recent-my-apps").innerHTML = `
+            <div class="table-wrap"><table>
+                <thead><tr><th>App ID</th><th>Company</th><th>Role</th><th>Status</th></tr></thead>
+                <tbody>${recentRows.map(r => `<tr>
+                    <td class="mono">#${r.aid}</td>
+                    <td>${r.intern ? (r.intern.companyName || "") : ""}</td>
+                    <td>${r.intern ? (r.intern.role || "") : ""}</td>
+                    <td>${statusBadge(r.latest)}</td>
+                </tr>`).join("")}</tbody>
+            </table></div>`;
+        }
+    } catch (e) { console.error("loadOverviewStats error:", e); showToast("Stats error: " + (e.message||e), "error"); }
+}
+
+async function loadInternships() {
+    if (!contract) { showToast("Connect wallet first", "warn"); return; }
+    showLoader(true);
+    try {
+        const myAppIds = (await contract.methods.getStudentApplications(userAccount).call()) || [];
+        appliedIds = new Set();
+        for (const aid of myAppIds) {
+            const app = await contract.methods.applications(aid).call();
+            if (app) appliedIds.add(Number(app.internshipId));
+        }
+
+        const total = Number(await contract.methods.internshipCount().call());
+        if (total === 0) {
+            document.getElementById("internship-grid").innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">💼</div><p>No internships posted yet</p></div>';
+            return;
+        }
+
+        const cards = [];
+        for (let i = total; i >= 1; i--) {
+            let intern;
+            try { intern = await contract.methods.internships(i).call(); } catch(_) { continue; }
+            if (!intern || !intern.isActive) continue;
+
+            const role     = intern.role        != null ? String(intern.role)        : "Untitled Role";
+            const company  = intern.companyName != null ? String(intern.companyName) : "Unknown Company";
+            const desc     = intern.description != null ? String(intern.description) : "";
+            const location = intern.location    != null ? String(intern.location)    : "N/A";
+            const safeRole    = role.replace(/'/g, "\\'");
+            const safeCompany = company.replace(/'/g, "\\'");
+            const safeDesc    = desc.replace(/'/g, "\\'");
+            const appIds = (await contract.methods.getInternshipApplications(i).call()) || [];
+            const alreadyApplied = appliedIds.has(i);
+
+            cards.push(`<div class="internship-card">
+                <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
+                    <div>
+                        <h3>${role}</h3>
+                        <div class="company">🏢 ${company}</div>
+                    </div>
+                    <span class="mono" style="font-size:11px;color:var(--text3);background:var(--surface2);padding:3px 8px;border-radius:6px">#${intern.id}</span>
+                </div>
+                <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">${desc.substring(0,120)}${desc.length>120?'...':''}</div>
+                <div class="meta" style="margin-bottom:14px">
+                    <span>📍 ${location}</span>
+                    <span>👥 ${appIds.length} applied</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-size:11px;color:var(--text3)">${tsToDate(intern.postedAt)}</span>
+                    ${alreadyApplied
+                        ? `<span class="badge" style="background:rgba(16,185,129,.1);color:var(--green);border:1px solid rgba(16,185,129,.2)">✅ Applied</span>`
+                        : `<button class="btn btn-success btn-sm" onclick="openApplyModal(${i},'${safeRole}','${safeCompany}','${safeDesc.substring(0,100)}')">Apply Now</button>`
+                    }
+                </div>
+            </div>`);
+        }
+        document.getElementById("internship-grid").innerHTML = cards.length
+            ? cards.join("")
+            : '<div class="empty-state" style="grid-column:1/-1"><div class="icon">💼</div><p>No internships yet</p></div>';
+    } catch (e) {
+        console.error("JS error:", e);
+        showToast("Error: " + (e && e.message ? e.message : String(e)), "error");
+    } finally { showLoader(false); }
+}
+
+async function loadMyApplications() {
+    if (!contract) { showToast("Connect wallet first", "warn"); return; }
+    showLoader(true);
+    try {
+        const myAppIds = (await contract.methods.getStudentApplications(userAccount).call()) || [];
+        if (myAppIds.length === 0) {
+            document.getElementById("myapps-tbody").innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="icon">📋</div><p>No applications yet</p></div></td></tr>`;
+            return;
+        }
+        const rows = [];
+        for (const aid of [...myAppIds].reverse()) {
+            const app    = await contract.methods.applications(aid).call();
+            const intern = await contract.methods.internships(app.internshipId).call();
+            const hist   = (await contract.methods.getStatusHistory(aid).call()) || [];
+            if (!hist.length) continue;
+            const latest = hist[hist.length - 1];
+            rows.push(`<tr>
+                <td class="mono">#${aid}</td>
+                <td>${intern.companyName}</td>
+                <td>${intern.role}</td>
+                <td>${tsToDate(app.submittedAt)}</td>
+                <td>${statusBadge(latest.status)}</td>
+                <td>
+                    <button class="btn btn-outline btn-sm" onclick="openHistory(${aid})">📜 ${hist.length} entries</button>
+                </td>
+            </tr>`);
+        }
+        document.getElementById("myapps-tbody").innerHTML = rows.join("");
+    } catch (e) {
+        console.error("JS error:", e);
+        showToast("Error: " + (e && e.message ? e.message : String(e)), "error");
+    } finally { showLoader(false); }
+}
+
+function openApplyModal(internshipId, role, company, desc) {
+    applyTargetId = internshipId;
+    document.getElementById("apply-internship-info").innerHTML = `
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">${role}</div>
+        <div style="font-size:13px;color:var(--accent);margin-bottom:8px">🏢 ${company}</div>
+        <div style="font-size:13px;color:var(--text2)">${desc}...</div>
+    `;
+    document.getElementById("apply-modal").classList.add("open");
+}
+
+function closeApplyModal() {
+    document.getElementById("apply-modal").classList.remove("open");
+    applyTargetId = null;
+}
+
+async function confirmApply() {
+    if (!applyTargetId) return;
+    const internshipId = applyTargetId;  // save BEFORE closeApplyModal nulls it
+    closeApplyModal();
+    showLoader(true);
+    try {
+        await contract.methods.applyForInternship(internshipId).send({ from: userAccount, gas: 500000 });
+        appliedIds.add(internshipId);
+        showToast("Application submitted on-chain! ⛓️", "success");
+        await loadInternships();
+        await loadOverviewStats();
+    } catch (e) {
+        console.error("confirmApply error:", e);
+        const msg = (e && e.message) ? e.message : String(e);
+        if (msg.includes("already")) {
+            showToast("Already applied!", "warn");
+        } else {
+            showToast("Error: " + msg, "error");
+        }
+    } finally { showLoader(false); }
+}
+
+async function trackApplication() {
+    if (!contract) { showToast("Connect wallet first", "warn"); return; }
+    const id = document.getElementById("track-id").value;
+    if (!id) { showToast("Enter an Application ID", "error"); return; }
+    showLoader(true);
+    try {
+        const app = await contract.methods.applications(id).call();
+        if (app.id == 0) { showToast("Application not found", "error"); showLoader(false); return; }
+        const intern = await contract.methods.internships(app.internshipId).call();
+        const hist = await contract.methods.getStatusHistory(id).call();
+
+        document.getElementById("track-title").textContent = `Application #${id} — ${intern.role}`;
+        document.getElementById("track-details").innerHTML = `
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
+                <div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">COMPANY</div><div style="font-size:14px">${intern.companyName}</div></div>
+                <div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">ROLE</div><div style="font-size:14px">${intern.role}</div></div>
+                <div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">STUDENT</div><div style="font-size:14px">${app.studentName}</div></div>
+                <div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">WALLET</div><div class="mono" style="font-size:12px;color:var(--text2)">${shortenAddr(app.studentWallet)}</div></div>
+                <div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">SUBMITTED</div><div style="font-size:14px">${tsToDate(app.submittedAt)}</div></div>
+                <div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">CURRENT STATUS</div>${statusBadge(hist[hist.length-1].status)}</div>
+            </div>
+        `;
+
+        const items = hist.map((h, i) => {
+            const color = STATUS_COLORS[h.status] || "#888";
+            const isLast = i === hist.length - 1;
+            return `<div class="timeline-item">
+                ${!isLast ? '<div class="timeline-line"></div>' : ''}
+                <div class="timeline-dot" style="background:${color}22;border:2px solid ${color};color:${color}">${i+1}</div>
+                <div class="timeline-content">
+                    <div class="timeline-status" style="color:${color}">${STATUS_LABELS[h.status] || h.status}</div>
+                    <div class="timeline-meta">${tsToDate(h.timestamp)} · Updated by ${shortenAddr(h.updatedBy)}</div>
+                    ${h.note ? `<div class="timeline-note">"${h.note}"</div>` : ''}
+                </div>
+            </div>`;
+        }).join("");
+
+        document.getElementById("track-timeline").innerHTML = items;
+        document.getElementById("track-chain-info").innerHTML = `⛓️ <strong>${hist.length}</strong> immutable blockchain entries · All data cryptographically verified · Cannot be altered`;
+        document.getElementById("track-result").style.display = "";
+    } catch (e) {
+        console.error("JS error:", e);
+        showToast("Error: " + (e && e.message ? e.message : String(e)), "error");
+    } finally { showLoader(false); }
+}
+
+async function openHistory(appId) {
+    if (!contract) return;
+    showLoader(true);
+    try {
+        const hist = await contract.methods.getStatusHistory(appId).call();
+        const app = await contract.methods.applications(appId).call();
+        const intern = await contract.methods.internships(app.internshipId).call();
+        const items = hist.map((h, i) => {
+            const color = STATUS_COLORS[h.status] || "#888";
+            const isLast = i === hist.length - 1;
+            return `<div class="timeline-item">
+                ${!isLast ? '<div class="timeline-line"></div>' : ''}
+                <div class="timeline-dot" style="background:${color}22;border:2px solid ${color}">${i+1}</div>
+                <div class="timeline-content">
+                    <div class="timeline-status" style="color:${color}">${STATUS_LABELS[h.status] || h.status}</div>
+                    <div class="timeline-meta">${tsToDate(h.timestamp)}</div>
+                    ${h.note ? `<div class="timeline-note">"${h.note}"</div>` : ''}
+                </div>
+            </div>`;
+        }).join("");
+        document.getElementById("history-content").innerHTML = `
+            <div style="margin-bottom:12px;font-size:13px;color:var(--text2)">
+                <strong>${intern.role}</strong> at <strong>${intern.companyName}</strong>
+            </div>
+            <div class="timeline">${items}</div>
+            <div style="margin-top:16px;padding:10px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text3)">
+                ⛓️ ${hist.length} immutable on-chain entries
+            </div>`;
+        document.getElementById("history-modal").classList.add("open");
+    } catch (e) {
+        console.error("JS error:", e);
+        showToast("Error: " + (e && e.message ? e.message : String(e)), "error");
+    } finally { showLoader(false); }
+}
+
+function closeHistoryModal() {
+    document.getElementById("history-modal").classList.remove("open");
+}
+</script>
+</body>
+</html>

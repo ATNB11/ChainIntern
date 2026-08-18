@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recruiter — ChainIntern</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.sidebar-item.active { border-left: 2px solid var(--recruiter-accent); }
+.topbar-brand .logo-icon { background: rgba(124,58,237,.15); }
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+<div id="loader"><div class="spinner"></div><span style="color:var(--text2);font-size:14px">Processing transaction...</span></div>
+
+<!-- ── Not-Registered Wall ──────────────────────────────────────── -->
+<div id="not-registered-wall" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg,#0d0d14);display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:32px">
+    <div style="font-size:64px">&#x1F6AB;</div>
+    <div style="font-size:22px;font-weight:700;color:var(--text,#fff)">Access Denied</div>
+    <div style="max-width:420px;text-align:center;font-size:14px;color:var(--text2,#aaa);line-height:1.8">
+        The wallet <code id="denied-addr" style="color:#F59E0B"></code> is <strong>not registered as a Recruiter</strong>.<br><br>
+        Ask the <strong>Admin</strong> to register your wallet address, then reconnect.
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px">
+        <a href="/" class="btn btn-outline">🏠 Home</a>
+        <button class="btn btn-primary" onclick="retryConnect()">🔄 Try Different Wallet</button>
+    </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-overlay" id="status-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Update Application Status</div>
+            <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div id="modal-app-info" style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:var(--text2)"></div>
+        <div class="form-group" style="margin-bottom:14px">
+            <label>New Status</label>
+            <select id="new-status">
+                <!-- options populated dynamically based on current status -->
+            </select>
+            <div id="status-terminal-msg" style="display:none;padding:10px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;font-size:13px;color:var(--green);text-align:center"></div>
+        </div>
+        <div class="form-group" style="margin-bottom:18px">
+            <label>Note (optional)</label>
+            <input type="text" id="status-note" placeholder="e.g. Strong profile, moving forward">
+        </div>
+        <button class="btn btn-primary" style="width:100%" onclick="submitStatusUpdate()">Update On-Chain</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="history-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">📜 Application History</div>
+            <button class="modal-close" onclick="closeHistoryModal()">✕</button>
+        </div>
+        <div id="history-content"></div>
+    </div>
+</div>
+
+<!-- ─── Topbar ─────────────────────────────────────────────────────── -->
+<header class="topbar">
+    <a href="/" class="topbar-brand">
+        <div class="logo-icon">🏢</div>
+        ChainIntern <span style="color:var(--recruiter-accent);margin-left:4px">Recruiter</span>
+    </a>
+    <div class="topbar-right">
+        <div class="wallet-pill">
+            <div class="wallet-dot"></div>
+            <span class="wallet-addr mono">Not connected</span>
+        </div>
+        <button class="btn btn-outline btn-sm" id="connect-btn" onclick="connectWallet()">🦊 Connect MetaMask</button>
+    </div>
+</header>
+
+<div class="layout">
+    <aside class="sidebar">
+        <div class="sidebar-section">Dashboard</div>
+        <a class="sidebar-item active" onclick="showSection('overview')"><span class="icon">📊</span> Overview</a>
+        <div class="sidebar-section">Manage</div>
+        <a class="sidebar-item" onclick="showSection('post')"><span class="icon">📮</span> Post Internship</a>
+        <a class="sidebar-item" onclick="showSection('applications')"><span class="icon">📋</span> Applications</a>
+        <a class="sidebar-item" onclick="showSection('postings')"><span class="icon">💼</span> My Postings</a>
+        <a class="sidebar-item" href="/"><span class="icon">🏠</span> Home</a>
+    </aside>
+
+    <main class="main">
+
+        <!-- Overview -->
+        <section id="s-overview">
+            <div class="welcome-banner" style="--accent:var(--recruiter-accent)">
+                <h2>Welcome, <span id="welcome-name">Recruiter</span> 🏢</h2>
+                <p>Post internship opportunities and manage student applications — all on-chain.</p>
+            </div>
+            <div class="stats-row">
+                <div class="stat-card purple">
+                    <span class="stat-label">My Postings</span>
+                    <span class="stat-value" id="stat-postings">—</span>
+                    <span class="stat-icon">💼</span>
+                </div>
+                <div class="stat-card blue">
+                    <span class="stat-label">Total Applicants</span>
+                    <span class="stat-value" id="stat-total-apps">—</span>
+                    <span class="stat-icon">👥</span>
+                </div>
+                <div class="stat-card green">
+                    <span class="stat-label">Accepted</span>
+                    <span class="stat-value" id="stat-accepted">—</span>
+                    <span class="stat-icon">✅</span>
+                </div>
+                <div class="stat-card amber">
+                    <span class="stat-label">Shortlisted</span>
+                    <span class="stat-value" id="stat-shortlisted">—</span>
+                    <span class="stat-icon">⭐</span>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Recent Applications</div>
+                <div id="recent-apps-list">
+                    <div class="empty-state"><div class="icon">📋</div><p>Connect wallet to view applications</p></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Post -->
+        <section id="s-post" style="display:none">
+            <div class="page-header">
+                <h1>📮 Post Internship</h1>
+                <p>Publish a new internship opportunity on-chain. Only your wallet can post.</p>
+            </div>
+            <div class="card">
+                <div class="card-title">New Internship Posting</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Role / Position</label>
+                        <input type="text" id="p-role" placeholder="e.g. Software Engineering Intern">
+                    </div>
+                    <div class="form-group">
+                        <label>Location</label>
+                        <input type="text" id="p-location" placeholder="e.g. Bengaluru, India (Remote)">
+                    </div>
+                    <div class="form-group full">
+                        <label>Description</label>
+                        <textarea id="p-desc" rows="4" placeholder="Describe the internship role, responsibilities, and requirements..."></textarea>
+                    </div>
+                </div>
+                <button class="btn btn-primary" style="margin-top:16px" onclick="postInternship()">🚀 Post On-Chain</button>
+                <div id="post-result" style="display:none;margin-top:14px">
+                    <div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:12px;font-size:13px;color:var(--green)">
+                        ✅ Internship posted! ID: <span id="posted-id" class="mono"></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Applications -->
+        <section id="s-applications" style="display:none">
+            <div class="page-header">
+                <h1>📋 Applications</h1>
+                <p>Review and update statuses for all applications to your internship postings.</p>
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:16px">
+                <button class="btn btn-outline btn-sm" onclick="loadApplications()">🔄 Refresh</button>
+            </div>
+            <div class="card" style="padding:0;overflow:hidden">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>App ID</th>
+                                <th>Internship</th>
+                                <th>Student</th>
+                                <th>Applied</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="apps-tbody">
+                            <tr><td colspan="6"><div class="empty-state"><div class="icon">📋</div><p>No applications yet</p></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- My Postings -->
+        <section id="s-postings" style="display:none">
+            <div class="page-header">
+                <h1>💼 My Postings</h1>
+                <p>All internship opportunities you've published on-chain.</p>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="loadMyPostings()" style="margin-bottom:16px">🔄 Refresh</button>
+            <div id="postings-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
+                <div class="empty-state"><div class="icon">💼</div><p>No postings yet</p></div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<script src="/static/js/web3.min.js"></script>
+<script src="/static/js/web3utils.js"></script>
+<script>
+let selectedAppId = null;
+let myInternshipIds = [];
+
+function showSection(name) {
+    document.querySelectorAll("main section").forEach(s => s.style.display = "none");
+    document.getElementById("s-" + name).style.display = "";
+    document.querySelectorAll(".sidebar-item").forEach(el => el.classList.remove("active"));
+    if (name === "applications") loadApplications();
+    if (name === "postings") loadMyPostings();
+    if (name === "overview") loadOverviewStats();
+}
+
+async function connectWallet() {
+    const btn = document.getElementById("connect-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Connecting…"; }
+    const ok = await initWeb3();
+    if (!ok) {
+        if (btn) { btn.disabled = false; btn.textContent = "🦊 Connect MetaMask"; }
+        return;
+    }
+
+    // ─ Role check ──────────────────────────────────
+    if (contract) {
+        try {
+            const role = await contract.methods.getRole(userAccount).call();
+            if (role !== "recruiter") {
+                // Show the not-registered wall
+                document.getElementById("denied-addr").textContent = userAccount;
+                const wall = document.getElementById("not-registered-wall");
+                wall.style.display = "flex";
+                if (btn) { btn.disabled = false; btn.textContent = "🦊 Connect MetaMask"; }
+                return; // block further access
+            }
+        } catch (e) {
+            showToast("Could not verify role: " + e.message, "error");
+            if (btn) { btn.disabled = false; btn.textContent = "🦊 Connect MetaMask"; }
+            return;
+        }
+    }
+
+    // ─ Authorised ─────────────────────────────────
+    document.querySelectorAll(".wallet-addr").forEach(el => el.textContent = shortenAddr(userAccount));
+    if (btn) btn.textContent = "✅ " + shortenAddr(userAccount);
+
+    // Fetch registered name from chain
+    try {
+        const name = await contract.methods.walletToName(userAccount).call();
+        if (name && name.trim()) {
+            document.getElementById("welcome-name").textContent = name;
+        }
+    } catch (e) {}
+
+    showToast("Connected: " + shortenAddr(userAccount), "success");
+    await loadOverviewStats();
+}
+
+function retryConnect() {
+    // Hide the wall and let user pick another account in MetaMask
+    document.getElementById("not-registered-wall").style.display = "none";
+    userAccount = null;
+    contract    = null;
+    connectWallet();
+}
+
+async function loadOverviewStats() {
+    if (!contract) return;
+    try {
+        const totalInt = Number(await contract.methods.internshipCount().call());
+        myInternshipIds = [];
+        for (let i = 1; i <= totalInt; i++) {
+            const intern = await contract.methods.internships(i).call();
+            if (intern.recruiterWallet.toLowerCase() === userAccount.toLowerCase()) {
+                myInternshipIds.push(i);
+            }
+        }
+        document.getElementById("stat-postings").textContent = myInternshipIds.length;
+
+        let total = 0, accepted = 0, shortlisted = 0;
+        const recentRows = [];
+
+        for (const iid of myInternshipIds) {
+            const appIds = await contract.methods.getInternshipApplications(iid).call();
+            const intern = await contract.methods.internships(iid).call();
+            for (const aid of appIds) {
+                total++;
+                const app = await contract.methods.applications(aid).call();
+                const hist = await contract.methods.getStatusHistory(aid).call();
+                const latest = hist[hist.length - 1].status;
+                if (latest === "accepted") accepted++;
+                if (latest === "shortlisted") shortlisted++;
+                if (recentRows.length < 5) {
+                    recentRows.push({ aid, app, intern, latest });
+                }
+            }
+        }
+        document.getElementById("stat-total-apps").textContent = total;
+        document.getElementById("stat-accepted").textContent = accepted;
+        document.getElementById("stat-shortlisted").textContent = shortlisted;
+
+        if (recentRows.length === 0) {
+            document.getElementById("recent-apps-list").innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No applications yet</p></div>';
+        } else {
+            document.getElementById("recent-apps-list").innerHTML = `
+            <div class="table-wrap"><table>
+                <thead><tr><th>App ID</th><th>Role</th><th>Student</th><th>Status</th></tr></thead>
+                <tbody>${recentRows.map(r => `<tr>
+                    <td class="mono">#${r.aid}</td>
+                    <td>${r.intern.role}</td>
+                    <td>${r.app.studentName}</td>
+                    <td>${statusBadge(r.latest)}</td>
+                </tr>`).join("")}</tbody>
+            </table></div>`;
+        }
+    } catch (e) { console.error(e); }
+}
+
+async function postInternship() {
+    if (!contract) { showToast("Connect wallet first", "error"); return; }
+    const role = document.getElementById("p-role").value.trim();
+    const desc = document.getElementById("p-desc").value.trim();
+    const loc = document.getElementById("p-location").value.trim();
+    if (!role || !desc || !loc) { showToast("Fill all fields", "error"); return; }
+    showLoader(true);
+    try {
+        const tx = await contract.methods.postInternship(role, desc, loc).send({ from: userAccount, gas: 500000 });
+        const id = tx.events?.InternshipPosted?.returnValues?.id || "?";
+        document.getElementById("post-result").style.display = "";
+        document.getElementById("posted-id").textContent = id;
+        document.getElementById("p-role").value = "";
+        document.getElementById("p-desc").value = "";
+        document.getElementById("p-location").value = "";
+        showToast("Internship posted on-chain! ID: " + id, "success");
+    } catch (e) {
+        showToast("Error: " + e.message, "error");
+    } finally { showLoader(false); }
+}
+
+async function loadApplications() {
+    if (!contract) { showToast("Connect wallet first", "warn"); return; }
+    showLoader(true);
+    try {
+        const totalInt = Number(await contract.methods.internshipCount().call());
+        myInternshipIds = [];
+        for (let i = 1; i <= totalInt; i++) {
+            const intern = await contract.methods.internships(i).call();
+            if (intern.recruiterWallet.toLowerCase() === userAccount.toLowerCase()) myInternshipIds.push(i);
+        }
+
+        const rows = [];
+        for (const iid of myInternshipIds) {
+            const intern = await contract.methods.internships(iid).call();
+            const appIds = await contract.methods.getInternshipApplications(iid).call();
+            for (const aid of appIds) {
+                const app = await contract.methods.applications(aid).call();
+                const hist = await contract.methods.getStatusHistory(aid).call();
+                const latest = hist[hist.length - 1].status;
+                rows.push(`<tr>
+                    <td class="mono">#${aid}</td>
+                    <td>${intern.role}<br><small style="color:var(--text3)">${intern.companyName}</small></td>
+                    <td>${app.studentName}<br><small class="mono" style="color:var(--text3)">${shortenAddr(app.studentWallet)}</small></td>
+                    <td>${tsToDate(app.submittedAt)}</td>
+                    <td>${statusBadge(latest)}</td>
+                    <td style="display:flex;gap:6px;flex-wrap:wrap">
+                        ${(latest === "accepted" || latest === "rejected")
+                            ? `<span style="font-size:11px;color:var(--text3);padding:4px 8px">🔒 Final</span>`
+                            : `<button class="btn btn-outline btn-sm" onclick="openStatusModal(${aid},'${intern.role}','${app.studentName}','${latest}')">✏️ Update</button>`
+                        }
+                        <button class="btn btn-outline btn-sm" onclick="openHistory(${aid})">📜 History</button>
+                    </td>
+                </tr>`);
+            }
+        }
+        document.getElementById("apps-tbody").innerHTML = rows.length
+            ? rows.join("")
+            : `<tr><td colspan="6"><div class="empty-state"><div class="icon">📋</div><p>No applications found</p></div></td></tr>`;
+    } catch (e) {
+        showToast("Error: " + e.message, "error");
+    } finally { showLoader(false); }
+}
+
+async function loadMyPostings() {
+    if (!contract) { showToast("Connect wallet first", "warn"); return; }
+    showLoader(true);
+    try {
+        const totalInt = Number(await contract.methods.internshipCount().call());
+        const cards = [];
+        for (let i = 1; i <= totalInt; i++) {
+            const intern = await contract.methods.internships(i).call();
+            if (intern.recruiterWallet.toLowerCase() === userAccount.toLowerCase()) {
+                const appIds = await contract.methods.getInternshipApplications(i).call();
+                cards.push(`<div class="internship-card">
+                    <div style="display:flex;justify-content:space-between;align-items:start">
+                        <div>
+                            <h3>${intern.role}</h3>
+                            <div class="company">${intern.companyName}</div>
+                        </div>
+                        <span class="mono" style="font-size:11px;color:var(--text3)">#${intern.id}</span>
+                    </div>
+                    <div style="font-size:13px;color:var(--text2);margin:10px 0;line-height:1.6">${intern.description.substring(0, 100)}${intern.description.length > 100 ? '...' : ''}</div>
+                    <div class="meta">
+                        <span>📍 ${intern.location}</span>
+                        <span>👥 ${appIds.length} applicants</span>
+                    </div>
+                    <div style="margin-top:12px;font-size:11px;color:var(--text3)">Posted: ${tsToDate(intern.postedAt)}</div>
+                </div>`);
+            }
+        }
+        document.getElementById("postings-grid").innerHTML = cards.length
+            ? cards.join("")
+            : '<div class="empty-state" style="grid-column:1/-1"><div class="icon">💼</div><p>No postings yet</p></div>';
+    } catch (e) {
+        showToast("Error: " + e.message, "error");
+    } finally { showLoader(false); }
+}
+
+// Valid forward-only transitions
+const STATUS_TRANSITIONS = {
+    submitted:    ["under_review", "rejected"],
+    under_review: ["shortlisted",  "rejected"],
+    shortlisted:  ["accepted",     "rejected"],
+    accepted:     [],   // terminal
+    rejected:     [],   // terminal
+};
+const STATUS_OPTION_LABELS = {
+    under_review: "Under Review",
+    shortlisted:  "Shortlisted",
+    accepted:     "Accepted",
+    rejected:     "Rejected",
+};
+
+function openStatusModal(appId, role, student, currentStatus) {
+    selectedAppId = appId;
+    document.getElementById("modal-app-info").innerHTML =
+        `App <strong class="mono">#${appId}</strong> · <strong>${role}</strong> · Applicant: <strong>${student}</strong><br>
+        <span style="font-size:12px;color:var(--text3)">Current: ${statusBadge(currentStatus)}</span>`;
+
+    const allowed = STATUS_TRANSITIONS[currentStatus] || [];
+    const sel     = document.getElementById("new-status");
+    const termMsg = document.getElementById("status-terminal-msg");
+    const submitBtn = document.querySelector('#status-modal .btn-primary');
+
+    if (allowed.length === 0) {
+        // Terminal state — nothing to change
+        sel.style.display      = "none";
+        termMsg.style.display  = "block";
+        termMsg.textContent    = `Status is already "${currentStatus}" — no further updates allowed.`;
+        submitBtn.style.display = "none";
+    } else {
+        sel.style.display       = "";
+        termMsg.style.display   = "none";
+        submitBtn.style.display = "";
+        sel.innerHTML = allowed.map(s =>
+            `<option value="${s}">${STATUS_OPTION_LABELS[s] || s}</option>`
+        ).join("");
+    }
+
+    document.getElementById("status-modal").classList.add("open");
+}
+
+function closeModal() {
+    document.getElementById("status-modal").classList.remove("open");
+    selectedAppId = null;
+}
+
+async function submitStatusUpdate() {
+    if (!selectedAppId) return;
+    const appId  = selectedAppId;           // save BEFORE closeModal nulls it
+    const status = document.getElementById("new-status").value;
+    const note   = document.getElementById("status-note").value.trim() || "Status updated";
+    closeModal();
+    showLoader(true);
+    try {
+        await contract.methods.updateApplicationStatus(appId, status, note).send({ from: userAccount, gas: 300000 });
+        showToast("Status updated on-chain! ⛓️", "success");
+        await loadApplications();
+    } catch (e) {
+        console.error("submitStatusUpdate error:", e);
+        showToast("Error: " + (e && e.message ? e.message : String(e)), "error");
+    } finally { showLoader(false); }
+}
+
+async function openHistory(appId) {
+    if (!contract) return;
+    showLoader(true);
+    try {
+        const hist = await contract.methods.getStatusHistory(appId).call();
+        const app = await contract.methods.applications(appId).call();
+        const items = hist.map((h, i) => {
+            const color = STATUS_COLORS[h.status] || "#888";
+            const isLast = i === hist.length - 1;
+            return `<div class="timeline-item">
+                ${!isLast ? '<div class="timeline-line"></div>' : ''}
+                <div class="timeline-dot" style="background:${color}22;border:2px solid ${color}">${i + 1}</div>
+                <div class="timeline-content">
+                    <div class="timeline-status" style="color:${color}">${STATUS_LABELS[h.status] || h.status}</div>
+                    <div class="timeline-meta">${tsToDate(h.timestamp)} · by ${shortenAddr(h.updatedBy)}</div>
+                    ${h.note ? `<div class="timeline-note">"${h.note}"</div>` : ''}
+                </div>
+            </div>`;
+        }).join("");
+        document.getElementById("history-content").innerHTML = `
+            <div style="margin-bottom:12px;font-size:13px;color:var(--text2)">
+                Application <strong class="mono">#${appId}</strong> · Student: <strong>${app.studentName}</strong>
+            </div>
+            <div class="timeline">${items}</div>
+            <div style="margin-top:16px;padding:10px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text3)">
+                ⛓️ ${hist.length} immutable entries on-chain
+            </div>`;
+        document.getElementById("history-modal").classList.add("open");
+    } catch (e) {
+        showToast("Error: " + e.message, "error");
+    } finally { showLoader(false); }
+}
+
+function closeHistoryModal() {
+    document.getElementById("history-modal").classList.remove("open");
+}
+</script>
+</body>
+</html>

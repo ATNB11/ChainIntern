@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin — ChainIntern</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.sidebar-item.active { border-left: 2px solid var(--admin-accent); }
+.topbar-brand .logo-icon { background: rgba(245,158,11,.15); }
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+<div id="loader"><div class="spinner"></div><span style="color:var(--text2);font-size:14px">Processing transaction...</span></div>
+
+<!-- ── Wrong-Wallet Wall ──────────────────────────────────────── -->
+<div id="wrong-wallet-wall" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg,#0d0d14);flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:32px">
+    <div style="font-size:64px">&#x1F510;</div>
+    <div style="font-size:22px;font-weight:700;color:var(--text,#fff)">Wrong Wallet</div>
+    <div style="max-width:460px;text-align:center;font-size:14px;color:var(--text2,#aaa);line-height:1.9">
+        The connected wallet is <strong>not the admin wallet</strong>.<br>
+        Only the contract deployer address can access this portal.<br><br>
+        <span style="color:#F59E0B;font-size:12px">Expected:&nbsp;</span>
+        <code id="required-addr-display" style="color:#F59E0B;font-size:12px;word-break:break-all"></code>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px">
+        <a href="/" class="btn btn-outline">🏠 Home</a>
+        <button class="btn btn-primary" onclick="retryConnect()">🔄 Try Different Wallet</button>
+    </div>
+</div>
+
+<!-- ─── Topbar ─────────────────────────────────────────────────────── -->
+<header class="topbar">
+    <a href="/" class="topbar-brand">
+        <div class="logo-icon">🛡️</div>
+        ChainIntern <span style="color:var(--admin-accent);margin-left:4px">Admin</span>
+    </a>
+    <div class="topbar-right">
+        <div class="wallet-pill">
+            <div class="wallet-dot"></div>
+            <span class="wallet-addr mono">Not connected</span>
+        </div>
+        <button class="btn btn-outline btn-sm" id="connect-btn" onclick="connectWallet()">🦊 Connect MetaMask</button>
+    </div>
+</header>
+
+<!-- ─── Layout ─────────────────────────────────────────────────────── -->
+<div class="layout">
+    <aside class="sidebar">
+        <div class="sidebar-section">Dashboard</div>
+        <a class="sidebar-item active" onclick="showSection('overview')"><span class="icon">📊</span> Overview</a>
+        <div class="sidebar-section">Management</div>
+        <a class="sidebar-item" onclick="showSection('deploy')"><span class="icon">🚀</span> Deploy Contract</a>
+        <a class="sidebar-item" onclick="showSection('recruiters')"><span class="icon">🏢</span> Register Recruiter</a>
+        <a class="sidebar-item" onclick="showSection('students')"><span class="icon">🎓</span> Register Student</a>
+        <div class="sidebar-section">Audit</div>
+        <a class="sidebar-item" onclick="showSection('ledger')"><span class="icon">📜</span> Full Ledger</a>
+        <a class="sidebar-item" href="/"><span class="icon">🏠</span> Home</a>
+    </aside>
+
+    <main class="main">
+
+        <!-- Overview -->
+        <section id="s-overview">
+            <div class="page-header">
+                <h1>Admin Control Panel</h1>
+                <p>Deploy the smart contract, register wallets, and audit the full ledger.</p>
+            </div>
+
+            <div class="stats-row">
+                <div class="stat-card amber">
+                    <span class="stat-label">Total Applications</span>
+                    <span class="stat-value" id="stat-apps">—</span>
+                    <span class="stat-icon">📋</span>
+                </div>
+                <div class="stat-card blue">
+                    <span class="stat-label">Internships Posted</span>
+                    <span class="stat-value" id="stat-intern">—</span>
+                    <span class="stat-icon">💼</span>
+                </div>
+                <div class="stat-card purple">
+                    <span class="stat-label">Contract Status</span>
+                    <span class="stat-value" id="stat-contract" style="font-size:16px">—</span>
+                    <span class="stat-icon">⛓️</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">⛓️ Contract Information</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                    <div>
+                        <div style="font-size:12px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Contract Address</div>
+                        <div class="mono" id="contract-addr-display" style="font-size:13px;color:var(--accent);word-break:break-all">Not deployed</div>
+                    </div>
+                    <div>
+                        <div style="font-size:12px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Admin Wallet</div>
+                        <div class="mono wallet-addr" style="font-size:13px;color:var(--text2)">—</div>
+                    </div>
+                    <div>
+                        <div style="font-size:12px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Network</div>
+                        <div style="font-size:13px;color:var(--text2)">⬡ Ganache Local (Chain ID: 1337)</div>
+                    </div>
+                    <div>
+                        <div style="font-size:12px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">RPC URL</div>
+                        <div class="mono" style="font-size:12px;color:var(--text3)">http://127.0.0.1:7545</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">⚙️ Consensus Algorithm Justification</div>
+                <div style="font-size:14px;color:var(--text2);line-height:1.8">
+                    <strong style="color:var(--admin-accent)">Proof of Authority (PoA)</strong> is chosen for this campus-level permissioned environment because:
+                    <ul style="margin:12px 0 0 16px;display:flex;flex-direction:column;gap:8px">
+                        <li><strong style="color:var(--text)">Known validators</strong> — University servers act as trusted authorities; no need for mining or staking.</li>
+                        <li><strong style="color:var(--text)">Fast finality</strong> — Transactions confirm in milliseconds, critical for real-time status updates.</li>
+                        <li><strong style="color:var(--text)">Low energy</strong> — No computational waste; suitable for an academic institution's infrastructure.</li>
+                        <li><strong style="color:var(--text)">Ganache compatibility</strong> — Ganache simulates PoA by default, perfect for development and testing.</li>
+                        <li><strong style="color:var(--text)">Permissioned access</strong> — Only admin-registered wallets can write to the ledger, matching the role-based model.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Deploy -->
+        <section id="s-deploy" style="display:none">
+            <div class="page-header">
+                <h1>🚀 Deploy Smart Contract</h1>
+                <p>Auto-compile &amp; deploy <code>InternshipTracker.sol</code> to your local Ganache instance in one click.</p>
+            </div>
+
+            <!-- Auto-Deploy Card -->
+            <div class="card">
+                <div class="card-title">⚡ One-Click Auto Deploy</div>
+                <div style="font-size:14px;color:var(--text2);line-height:1.8;margin-bottom:18px">
+                    <strong style="color:var(--admin-accent)">Step 1:</strong> Backend compiles <code>InternshipTracker.sol</code> using <code>py-solc-x</code> and returns the ABI + bytecode.<br>
+                    <strong style="color:var(--admin-accent)">Step 2:</strong> MetaMask opens a signing popup — <strong>you approve the deployment transaction</strong> from your connected wallet. The contract is deployed on Ganache and the transaction appears in your MetaMask history.
+                </div>
+                <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:14px;margin-bottom:18px;font-size:13px;color:var(--text2);line-height:1.7">
+                    <strong style="color:var(--amber)">📋 Prerequisites:</strong><br>
+                    1. Ganache running on port <strong>7545</strong><br>
+                    2. MetaMask connected to Ganache (Chain ID <strong>1337</strong>) and wallet imported<br>
+                    3. <code>InternshipTracker.sol</code> present in the <code>contracts/</code> folder
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap">
+                    <button class="btn btn-primary" id="auto-deploy-btn" onclick="autoDeploy()">
+                        🚀 Auto Deploy Contract
+                    </button>
+                    <button class="btn btn-outline" onclick="loadExistingContract()">📂 Load Existing Address</button>
+                </div>
+                <div id="deploy-result" style="margin-top:16px;display:none">
+                    <div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:14px">
+                        <div style="font-size:12px;color:var(--green);font-weight:700;margin-bottom:6px">✅ CONTRACT DEPLOYED</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                            <div>
+                                <div style="font-size:11px;color:var(--text3);margin-bottom:3px">CONTRACT ADDRESS</div>
+                                <div class="mono" id="deploy-addr" style="font-size:13px;color:var(--green);word-break:break-all"></div>
+                            </div>
+                            <div>
+                                <div style="font-size:11px;color:var(--text3);margin-bottom:3px">DEPLOYED BY</div>
+                                <div class="mono" id="deploy-deployer" style="font-size:13px;color:var(--text2);word-break:break-all"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Load by address Card -->
+            <div class="card">
+                <div class="card-title">📄 Load Existing by Address</div>
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label>Existing Contract Address</label>
+                        <input type="text" id="manual-addr" placeholder="0x...">
+                    </div>
+                </div>
+                <button class="btn btn-outline" style="margin-top:14px" onclick="saveManualAddress()">Save Address</button>
+            </div>
+
+            <!-- MetaMask Setup Guide -->
+            <div class="card">
+                <div class="card-title">🦊 MetaMask Setup Guide</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;font-size:13px;color:var(--text2);line-height:1.8">
+                    <div style="background:var(--surface2);border-radius:8px;padding:14px">
+                        <div style="font-weight:700;color:var(--admin-accent);margin-bottom:8px">① Add Ganache Network</div>
+                        <div>Clicking <strong>Connect MetaMask</strong> auto-adds the network.<br>Or add manually:</div>
+                        <ul style="margin:8px 0 0 16px;display:flex;flex-direction:column;gap:4px">
+                            <li>RPC: <code>http://127.0.0.1:7545</code></li>
+                            <li>Chain ID: <code>1337</code></li>
+                            <li>Symbol: <code>ETH</code></li>
+                        </ul>
+                    </div>
+                    <div style="background:var(--surface2);border-radius:8px;padding:14px">
+                        <div style="font-weight:700;color:var(--admin-accent);margin-bottom:8px">② Import Ganache Account</div>
+                        <div>In MetaMask → <em>Import Account</em> → paste a private key from Ganache's <strong>Keys</strong> icon.<br><br>Use account #0 as Admin, assign others to recruiters/students.</div>
+                    </div>
+                    <div style="background:var(--surface2);border-radius:8px;padding:14px">
+                        <div style="font-weight:700;color:var(--admin-accent);margin-bottom:8px">③ Deploy &amp; Register</div>
+                        <div>Click <strong>Auto Deploy Contract</strong> above, then register recruiter/student wallets using their Ganache addresses shown in the Ganache UI.</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recruiters -->
+        <section id="s-recruiters" style="display:none">
+            <div class="page-header">
+                <h1>🏢 Register Recruiter</h1>
+                <p>Add a company wallet as an authorized recruiter on-chain.</p>
+            </div>
+            <div class="card">
+                <div class="card-title">Register New Recruiter</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Company/Recruiter Name</label>
+                        <input type="text" id="rec-name" placeholder="Google India">
+                    </div>
+                    <div class="form-group">
+                        <label>Wallet Address</label>
+                        <input type="text" id="rec-wallet" placeholder="0x...">
+                    </div>
+                </div>
+                <button class="btn btn-primary" style="margin-top:14px" onclick="registerRecruiter()">Register Recruiter</button>
+            </div>
+            <div class="card">
+                <div class="card-title">Registered Recruiters</div>
+                <div id="recruiters-list">
+                    <div class="empty-state"><div class="icon">🏢</div><p>No recruiters registered yet</p></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Students -->
+        <section id="s-students" style="display:none">
+            <div class="page-header">
+                <h1>🎓 Register Student</h1>
+                <p>Add a student wallet to allow them to apply for internships.</p>
+            </div>
+            <div class="card">
+                <div class="card-title">Register New Student</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Student Name</label>
+                        <input type="text" id="stu-name" placeholder="Rahul Sharma">
+                    </div>
+                    <div class="form-group">
+                        <label>Wallet Address</label>
+                        <input type="text" id="stu-wallet" placeholder="0x...">
+                    </div>
+                </div>
+                <button class="btn btn-primary" style="margin-top:14px" onclick="registerStudent()">Register Student</button>
+            </div>
+            <div class="card">
+                <div class="card-title">Registered Students</div>
+                <div id="students-list">
+                    <div class="empty-state"><div class="icon">🎓</div><p>No students registered yet</p></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Ledger -->
+        <section id="s-ledger" style="display:none">
+            <div class="page-header">
+                <h1>📜 Full Audit Ledger</h1>
+                <p>Immutable on-chain record of all applications and status transitions.</p>
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
+                <button class="btn btn-outline btn-sm" onclick="loadLedger()">🔄 Refresh Ledger</button>
+                <span style="font-size:12px;color:var(--text3)">All entries are cryptographically immutable once committed.</span>
+            </div>
+            <div class="card" style="padding:0;overflow:hidden">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>App ID</th>
+                                <th>Internship</th>
+                                <th>Student</th>
+                                <th>Submitted</th>
+                                <th>Current Status</th>
+                                <th>Total Updates</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ledger-tbody">
+                            <tr><td colspan="6"><div class="empty-state"><div class="icon">📜</div><p>No applications yet</p></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<script src="/static/js/web3.min.js"></script>
+<script src="/static/js/web3utils.js"></script>
+<script>
+let contractAbi = [];
+
+// ── Hardcoded admin wallet ────────────────────────────────────────
+const ADMIN_WALLET = "0x03fDDBf79496a6423b531B06CAfC9a3dAbaD7319";
+document.getElementById("required-addr-display").textContent = ADMIN_WALLET;
+
+function showSection(name) {
+    document.querySelectorAll("main section").forEach(s => s.style.display = "none");
+    document.getElementById("s-" + name).style.display = "";
+    document.querySelectorAll(".sidebar-item").forEach(el => el.classList.remove("active"));
+    if (name === "ledger")    loadLedger();
+    if (name === "recruiters") renderRecruiters();
+    if (name === "students")   renderStudents();
+}
+
+async function connectWallet() {
+    const btn = document.getElementById("connect-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Connecting…"; }
+    const ok = await initWeb3();
+    if (!ok) {
+        if (btn) { btn.disabled = false; btn.textContent = "🦊 Connect MetaMask"; }
+        return;
+    }
+
+    // ─ Wallet check: must be the hardcoded admin wallet ──────────────
+    if (userAccount.toLowerCase() !== ADMIN_WALLET.toLowerCase()) {
+        document.getElementById("wrong-wallet-wall").style.display = "flex";
+        if (btn) { btn.disabled = false; btn.textContent = "🦊 Connect MetaMask"; }
+        return;
+    }
+
+    // ─ Authorised ─────────────────────────────────
+    document.querySelectorAll(".wallet-addr").forEach(el => el.textContent = shortenAddr(userAccount));
+    const info = await loadContractInfo();
+    document.getElementById("contract-addr-display").textContent = info.address || "Not deployed";
+    document.getElementById("stat-contract").textContent = info.address ? "Deployed ✓" : "Not Deployed";
+    if (btn) { btn.textContent = "✅ " + shortenAddr(userAccount); }
+    if (contract) await loadStats();
+    showToast("🔑 Admin connected: " + shortenAddr(userAccount), "success");
+}
+
+function retryConnect() {
+    document.getElementById("wrong-wallet-wall").style.display = "none";
+    userAccount = null;
+    contract    = null;
+    connectWallet();
+}
+
+async function loadStats() {
+    try {
+        const apps = await contract.methods.applicationCount().call();
+        const ints = await contract.methods.internshipCount().call();
+        document.getElementById("stat-apps").textContent = apps;
+        document.getElementById("stat-intern").textContent = ints;
+    } catch (e) {}
+}
+
+async function autoDeploy() {
+    if (!userAccount) { showToast("Connect MetaMask first", "error"); return; }
+    const btn = document.getElementById("auto-deploy-btn");
+    btn.disabled = true;
+    btn.textContent = "⏳ Compiling...";
+    showLoader(true);
+    try {
+        // Step 1: backend compiles → returns ABI + bytecode (no signing)
+        const compileRes  = await fetch("/api/compile", { method: "POST" });
+        const compileData = await compileRes.json();
+        if (!compileData.ok) throw new Error(compileData.error);
+
+        showToast("Compiled with solc " + compileData.solc + " — MetaMask will ask you to sign the deployment...", "info");
+        btn.textContent = "⏳ Waiting for MetaMask...";
+
+        // Step 2: deploy via MetaMask — this triggers the signing popup
+        const deployedContract = await new web3.eth.Contract(compileData.abi)
+            .deploy({ data: compileData.bytecode })
+            .send({ from: userAccount, gas: 3000000 });
+
+        const addr = deployedContract.options.address;
+        btn.textContent = "⏳ Saving...";
+
+        // Step 3: save address to Flask so /api/contract-info reflects it
+        await fetch("/api/save-contract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ address: addr })
+        });
+
+        // Step 4: build live contract instance
+        contract = new web3.eth.Contract(compileData.abi, addr);
+
+        // Step 5: update UI
+        document.getElementById("deploy-result").style.display = "";
+        document.getElementById("deploy-addr").textContent     = addr;
+        document.getElementById("deploy-deployer").textContent = userAccount;
+        document.getElementById("contract-addr-display").textContent = addr;
+        document.getElementById("stat-contract").textContent = "Deployed ✓";
+        showToast("✅ Contract deployed by MetaMask! " + addr.slice(0, 12) + "...", "success");
+    } catch (e) {
+        showToast("Deploy failed: " + (e.message || e), "error");
+    } finally {
+        showLoader(false);
+        btn.disabled = false;
+        btn.textContent = "🚀 Auto Deploy Contract";
+    }
+}
+
+async function loadExistingContract() {
+    const info = await loadContractInfo();
+    if (info.address) {
+        document.getElementById("manual-addr").value = info.address;
+        showToast("Address loaded", "success");
+    } else {
+        showToast("No contract deployed yet", "warn");
+    }
+}
+
+async function saveManualAddress() {
+    const addr = document.getElementById("manual-addr").value.trim();
+    if (!addr) { showToast("Enter an address", "error"); return; }
+    await fetch("/api/save-contract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: addr })
+    });
+    const info = await loadContractInfo();
+    if (typeof web3 !== "undefined" && web3) {
+        contract = new web3.eth.Contract(info.abi, addr);
+    }
+    document.getElementById("contract-addr-display").textContent = addr;
+    showToast("Contract address saved", "success");
+}
+
+async function registerRecruiter() {
+    if (!contract) { showToast("Connect wallet & load contract first", "error"); return; }
+    const name   = document.getElementById("rec-name").value.trim();
+    const wallet = document.getElementById("rec-wallet").value.trim();
+    if (!name || !wallet) { showToast("Fill all fields", "error"); return; }
+    showLoader(true);
+    try {
+        await contract.methods.registerRecruiter(wallet, name).send({ from: userAccount, gas: 300000 });
+        document.getElementById("rec-name").value   = "";
+        document.getElementById("rec-wallet").value = "";
+        showToast("Recruiter registered on-chain!", "success");
+        await renderRecruiters(); // reload from chain
+    } catch (e) {
+        showToast("Error: " + (e.message || e), "error");
+    } finally { showLoader(false); }
+}
+
+async function registerStudent() {
+    if (!contract) { showToast("Connect wallet & load contract first", "error"); return; }
+    const name   = document.getElementById("stu-name").value.trim();
+    const wallet = document.getElementById("stu-wallet").value.trim();
+    if (!name || !wallet) { showToast("Fill all fields", "error"); return; }
+    showLoader(true);
+    try {
+        await contract.methods.registerStudent(wallet, name).send({ from: userAccount, gas: 300000 });
+        document.getElementById("stu-name").value   = "";
+        document.getElementById("stu-wallet").value = "";
+        showToast("Student registered on-chain!", "success");
+        await renderStudents(); // reload from chain
+    } catch (e) {
+        showToast("Error: " + (e.message || e), "error");
+    } finally { showLoader(false); }
+}
+
+// ── Load recruiter/student lists from on-chain events ─────────────────────
+async function renderRecruiters() {
+    const el = document.getElementById("recruiters-list");
+    if (!contract) {
+        el.innerHTML = '<div class="empty-state"><div class="icon">🏢</div><p>Connect wallet to load</p></div>';
+        return;
+    }
+    el.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><p>Loading from chain…</p></div>';
+    try {
+        const events = await contract.getPastEvents("RecruiterRegistered", { fromBlock: 0, toBlock: "latest" });
+        if (!events.length) {
+            el.innerHTML = '<div class="empty-state"><div class="icon">🏢</div><p>No recruiters registered yet</p></div>';
+            return;
+        }
+        // Deduplicate: keep latest event per wallet
+        const seen = {};
+        events.forEach(e => { seen[e.returnValues.wallet.toLowerCase()] = e.returnValues; });
+        const rows = Object.values(seen);
+        el.innerHTML = `<div class="table-wrap"><table>
+            <thead><tr><th>Company</th><th>Wallet</th><th>Source</th></tr></thead>
+            <tbody>${rows.map(r => `<tr>
+                <td>${r.name}</td>
+                <td class="mono" style="font-size:12px">${r.wallet}</td>
+                <td><span class="chip">⛓️ On-chain</span></td>
+            </tr>`).join("")}
+            </tbody></table></div>`;
+    } catch (e) {
+        el.innerHTML = '<div class="empty-state"><div class="icon">❌</div><p>Error: ' + e.message + '</p></div>';
+    }
+}
+
+async function renderStudents() {
+    const el = document.getElementById("students-list");
+    if (!contract) {
+        el.innerHTML = '<div class="empty-state"><div class="icon">🎓</div><p>Connect wallet to load</p></div>';
+        return;
+    }
+    el.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><p>Loading from chain…</p></div>';
+    try {
+        const events = await contract.getPastEvents("StudentRegistered", { fromBlock: 0, toBlock: "latest" });
+        if (!events.length) {
+            el.innerHTML = '<div class="empty-state"><div class="icon">🎓</div><p>No students registered yet</p></div>';
+            return;
+        }
+        const seen = {};
+        events.forEach(e => { seen[e.returnValues.wallet.toLowerCase()] = e.returnValues; });
+        const rows = Object.values(seen);
+        el.innerHTML = `<div class="table-wrap"><table>
+            <thead><tr><th>Name</th><th>Wallet</th><th>Source</th></tr></thead>
+            <tbody>${rows.map(r => `<tr>
+                <td>${r.name}</td>
+                <td class="mono" style="font-size:12px">${r.wallet}</td>
+                <td><span class="chip">⛓️ On-chain</span></td>
+            </tr>`).join("")}
+            </tbody></table></div>`;
+    } catch (e) {
+        el.innerHTML = '<div class="empty-state"><div class="icon">❌</div><p>Error: ' + e.message + '</p></div>';
+    }
+}
+
+async function loadLedger() {
+    if (!contract) { showToast("Connect wallet first", "warn"); return; }
+    showLoader(true);
+    try {
+        const appCount = Number(await contract.methods.applicationCount().call());
+        const intCount = Number(await contract.methods.internshipCount().call());
+        document.getElementById("stat-apps").textContent = appCount;
+        document.getElementById("stat-intern").textContent = intCount;
+        if (appCount === 0) {
+            document.getElementById("ledger-tbody").innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="icon">📜</div><p>No applications on-chain yet</p></div></td></tr>`;
+            return;
+        }
+        const rows = [];
+        for (let i = 1; i <= appCount; i++) {
+            const app = await contract.methods.applications(i).call();
+            const internship = await contract.methods.internships(app.internshipId).call();
+            const history = await contract.methods.getStatusHistory(i).call();
+            const latest = history[history.length - 1];
+            rows.push(`<tr>
+                <td class="mono">#${app.id}</td>
+                <td>${internship.role}<br><small style="color:var(--text3)">${internship.companyName}</small></td>
+                <td class="mono">${shortenAddr(app.studentWallet)}<br><small style="color:var(--text2)">${app.studentName}</small></td>
+                <td>${tsToDate(app.submittedAt)}</td>
+                <td>${statusBadge(latest.status)}</td>
+                <td><span class="chip">⛓️ ${history.length} entries</span></td>
+            </tr>`);
+        }
+        document.getElementById("ledger-tbody").innerHTML = rows.join("");
+    } catch (e) {
+        showToast("Error: " + e.message, "error");
+    } finally { showLoader(false); }
+}
+
+// Lists are loaded from chain events when the section is shown (after wallet connect)
+</script>
+</body>
+</html>
